@@ -1,156 +1,115 @@
-import express, { Request, Response } from "express";
-import {
-  transcripts,
-  initialize,
-  getAll,
-  addStudent,
-  getTranscript,
-  getStudentIDs,
-  deleteStudent,
-  addGrade,
-  getGrade,
-  updateGrade,
-  deleteGrade,
-  listGrades,
-  reset,
-} from "./TranscriptManager";
+// Transcript manager
 
-const app = express();
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+export type StudentID = number;
+export type Student = { studentID: number; studentName: string };
+export type Course = string;
+export type CourseGrade = { course: Course; grade: number };
+export type Transcript = { student: Student; grades: CourseGrade[] };
 
-// ==================== ROUTES ====================
+let nextID = 5;
 
-// Debugging: list all transcripts
-app.get("/transcripts", (req: Request, res: Response) => {
-  res.json(getAll());
-});
+export let transcripts: Transcript[] = [
+  { student: { studentID: 1, studentName: "Sardor" }, grades: [] },
+  { student: { studentID: 2, studentName: "Jasur" }, grades: [] },
+  { student: { studentID: 3, studentName: "Jasur" }, grades: [] },
+  { student: { studentID: 4, studentName: "Nigora" }, grades: [] },
+];
 
-// Get transcript by student ID
-app.get("/transcripts/:id", (req: Request, res: Response) => {
-  const id = Number(req.params.id);
-  const transcript = getTranscript(id);
-  if (!transcript) {
-    return res.status(404).json({ error: "Transcript not found" });
-  }
-  res.json(transcript);
-});
+// RESET to initial students
+export function initialize() {
+  transcripts = [
+    { student: { studentID: 1, studentName: "Sardor" }, grades: [] },
+    { student: { studentID: 2, studentName: "Jasur" }, grades: [] },
+    { student: { studentID: 3, studentName: "Jasur" }, grades: [] },
+    { student: { studentID: 4, studentName: "Nigora" }, grades: [] },
+  ];
+  nextID = 5;
+}
 
-// Add grade to a student in a course
-app.post("/transcripts/:id/:course", (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    const course = req.params.course;
-    const grade = Number(req.body.grade);
+// GET all transcripts
+export function getAll(): Transcript[] {
+  return transcripts;
+}
 
-    if (isNaN(grade)) {
-      return res.status(400).json({ error: "Grade must be a number" });
-    }
+// ADD student
+export function addStudent(name: string): StudentID {
+  const newStudent: Student = { studentID: nextID++, studentName: name };
+  transcripts.push({ student: newStudent, grades: [] });
+  return newStudent.studentID;
+}
 
-    addGrade(id, course, grade);
-    res.send("OK");
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
+// GET transcript
+export function getTranscript(studentID: StudentID): Transcript | undefined {
+  return transcripts.find(t => t.student.studentID === studentID);
+}
 
-// Get grade for student in course
-app.get("/transcripts/:id/:course", (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    const course = req.params.course;
-    const grade = getGrade(id, course);
-    res.json({ studentID: id, course, grade });
-  } catch (err: any) {
-    res.status(404).json({ error: err.message });
-  }
-});
+// GET ids by name
+export function getStudentIDs(studentName: string): StudentID[] {
+  return transcripts
+    .filter(t => t.student.studentName === studentName)
+    .map(t => t.student.studentID);
+}
 
-// Add a new student
-app.post("/transcripts", (req: Request, res: Response) => {
-  const name = req.body.name;
-  if (!name) {
-    return res.status(400).json({ error: "Name is required" });
-  }
-  const id = addStudent(name);
-  res.json({ studentID: id });
-});
+// DELETE student
+export function deleteStudent(studentID: StudentID) {
+  const idx = transcripts.findIndex(t => t.student.studentID === studentID);
+  if (idx === -1) throw new Error("Student not found");
+  transcripts.splice(idx, 1);
+}
 
-// Get student IDs by name (query parameter)
-app.get("/studentids", (req: Request, res: Response) => {
-  const name = req.query.name as string;
-  if (!name) {
-    return res.status(400).json({ error: "Name query param is required" });
-  }
-  const ids = getStudentIDs(name);
-  res.json(ids);
-});
+// ADD grade
+export function addGrade(studentID: StudentID, course: Course, grade: number) {
+  const transcript = transcripts.find(t => t.student.studentID === studentID);
+  if (!transcript) throw new Error("Student not found");
 
-// Delete a student
-app.delete("/transcripts/:id", (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    deleteStudent(id);
-    res.send("Deleted");
-  } catch (err: any) {
-    res.status(404).json({ error: err.message });
-  }
-});
+  const exists = transcript.grades.find(g => g.course === course);
+  if (exists) throw new Error("Grade already exists");
 
-// Update grade
-app.put("/transcripts/:id/:course", (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    const course = req.params.course;
-    const grade = Number(req.body.grade);
+  transcript.grades.push({ course, grade });
+}
 
-    if (isNaN(grade)) {
-      return res.status(400).json({ error: "Grade must be a number" });
-    }
+// GET grade
+export function getGrade(studentID: StudentID, course: Course): number {
+  const transcript = transcripts.find(t => t.student.studentID === studentID);
+  if (!transcript) throw new Error("Student not found");
 
-    updateGrade(id, course, grade);
-    res.send("Updated");
-  } catch (err: any) {
-    res.status(400).json({ error: err.message });
-  }
-});
+  const grade = transcript.grades.find(g => g.course === course);
+  if (!grade) throw new Error("Grade not found");
 
-// Delete grade
-app.delete("/transcripts/:id/:course", (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    const course = req.params.course;
-    deleteGrade(id, course);
-    res.send("Deleted");
-  } catch (err: any) {
-    res.status(404).json({ error: err.message });
-  }
-});
+  return grade.grade;
+}
 
-// List grades for a student
-app.get("/grades/:id", (req: Request, res: Response) => {
-  try {
-    const id = Number(req.params.id);
-    const grades = listGrades(id);
-    res.json(grades);
-  } catch (err: any) {
-    res.status(404).json({ error: err.message });
-  }
-});
+// UPDATE grade
+export function updateGrade(studentID: StudentID, course: Course, grade: number) {
+  const transcript = transcripts.find(t => t.student.studentID === studentID);
+  if (!transcript) throw new Error("Student not found");
 
-// Reset database
-app.post("/reset", (req: Request, res: Response) => {
-  reset();
-  res.send("Database reset");
-});
+  const existing = transcript.grades.find(g => g.course === course);
+  if (!existing) throw new Error("Grade not found");
 
-// Initialize with 4 students
-app.post("/initialize", (req: Request, res: Response) => {
-  initialize();
-  res.send("Initialized with 4 students");
-});
+  existing.grade = grade;
+}
 
-// ==================== START SERVER ====================
-app.listen(8080, () => {
-  console.log("Server running at http://localhost:8080");
-});
+// DELETE grade
+export function deleteGrade(studentID: StudentID, course: Course) {
+  const transcript = transcripts.find(t => t.student.studentID === studentID);
+  if (!transcript) throw new Error("Student not found");
+
+  const idx = transcript.grades.findIndex(g => g.course === course);
+  if (idx === -1) throw new Error("Grade not found");
+
+  transcript.grades.splice(idx, 1);
+}
+
+// LIST grades
+export function listGrades(studentID: StudentID): CourseGrade[] {
+  const transcript = transcripts.find(t => t.student.studentID === studentID);
+  if (!transcript) throw new Error("Student not found");
+  return transcript.grades;
+}
+
+// RESET all
+export function reset() {
+  transcripts = [];
+  nextID = 1;
+}
